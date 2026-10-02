@@ -1,0 +1,8 @@
+const CACHE='recity-shell-v1';
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/offline.html','/favicon.svg']))));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('recity-shell-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',event=>{const u=new URL(event.request.url);if(event.request.method!=='GET'||u.origin!==self.location.origin||u.pathname.startsWith('/api/')||u.search||event.request.headers.has('authorization'))return;
+if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).then(r=>{if(r.ok&&u.pathname==='/'){const copy=r.clone();caches.open(CACHE).then(c=>c.put('/',copy))}return r}).catch(async()=>await caches.match('/')||await caches.match('/offline.html')));return}
+if(['script','style','image','font'].includes(event.request.destination)){event.respondWith(caches.match(event.request).then(c=>c||fetch(event.request).then(r=>{if(r.ok){const copy=r.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy))}return r})))}});
+self.addEventListener('push',event=>{let data={title:'RECITY update',body:'Open your job inbox for details.',url:'/'};try{data={...data,...event.data.json()}}catch{}event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:'/favicon.svg',data:{url:typeof data.url==='string'&&data.url.startsWith('/')&&!data.url.startsWith('//')?data.url:'/'}}))});
+self.addEventListener('notificationclick',event=>{event.notification.close();event.waitUntil(self.clients.openWindow(new URL(event.notification.data?.url||'/',self.location.origin).href))});

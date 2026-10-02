@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {decide,observationSchema} from '../lib/decision.ts';
+const sample={object:'Bottle',material:'plastic',category:'recyclable',certainty:'clear',condition:'intact',hazards:[],reason:'Visible container',questions:[],reuse_candidate:true};
+test('uncertainty never produces an reassuring score or reuse approval',()=>{const d=decide(observationSchema.parse({...sample,certainty:'uncertain'}));assert.equal(d.score,null);assert.equal(d.reuseAllowed,false)});
+test('special waste cannot inherit an AI reuse suggestion',()=>{for(const category of ['hazardous','animal_remains','sanitary','electronic']){const d=decide(observationSchema.parse({...sample,category}));assert.equal(d.reuseAllowed,false);assert.equal(d.label,'High')}});
+test('non-waste never gets a reuse project or numeric hazard score',()=>{const d=decide(observationSchema.parse({...sample,category:'not_waste'}));assert.equal(d.score,null);assert.equal(d.reuseAllowed,false)});
+test('known hazard blocks otherwise reusable material',()=>{assert.equal(decide(observationSchema.parse({...sample,hazards:['chemical']})).reuseAllowed,false)});
+test('malformed AI responses are rejected',()=>{assert.equal(observationSchema.safeParse({...sample,certainty:'100 percent safe'}).success,false)});
+test('same observations produce the same policy result',()=>{const o=observationSchema.parse(sample);assert.deepEqual(decide(o),decide(o))});

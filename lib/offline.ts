@@ -1,0 +1,11 @@
+import {supabase} from './supabase';
+export interface Draft {id:string;description:string;landmark:string;lat:number;lon:number;area:string;file:File;owner:string;}
+function db():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const r=indexedDB.open('recity-offline-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('reports',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+export async function drafts():Promise<Draft[]>{const d=await db();return new Promise((resolve,reject)=>{const r=d.transaction('reports').objectStore('reports').getAll();r.onsuccess=()=>{resolve(r.result);d.close()};r.onerror=()=>{reject(r.error);d.close()}})}
+export async function saveDraft(v:Draft){const d=await db();return new Promise<void>((resolve,reject)=>{const t=d.transaction('reports','readwrite');t.objectStore('reports').put(v);t.oncomplete=()=>{d.close();resolve()};t.onerror=()=>{d.close();reject(t.error)}})}
+export async function removeDraft(id:string){const d=await db();return new Promise<void>((resolve,reject)=>{const t=d.transaction('reports','readwrite');t.objectStore('reports').delete(id);t.oncomplete=()=>{d.close();resolve()};t.onerror=()=>{d.close();reject(t.error)}})}
+export async function sendDraft(d:Draft){const {data:{session}}=await supabase.auth.getSession();if(!session||session.user.id!==d.owner)throw Error('This draft belongs to another session. Restore that account before sending.');
+const path=`${d.owner}/${d.id}.${d.file.type==='image/png'?'png':d.file.type==='image/webp'?'webp':'jpg'}`;
+const old=await supabase.from('reports').select('id').eq('client_id',d.id).eq('citizen_id',d.owner).maybeSingle();if(old.error)throw Error(old.error.message);if(old.data)return old.data.id;
+const uploaded=await supabase.storage.from('report-media').upload(path,d.file,{upsert:false,contentType:d.file.type});if(uploaded.error&&!/already exists|duplicate/i.test(uploaded.error.message))throw Error(uploaded.error.message);
+const result=await supabase.rpc('create_report',{p_client:d.id,p_description:d.description,p_landmark:d.landmark,p_lat:d.lat,p_lon:d.lon,p_category:'unknown',p_photo:path,p_area:d.area});if(result.error)throw Error(result.error.message);return result.data as string;}
